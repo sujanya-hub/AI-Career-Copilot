@@ -286,11 +286,7 @@ _init_state()
 # ─── API helpers ──────────────────────────────────────────────────────────────
 
 def _unwrap_response(raw: dict) -> dict:
-    """
-    Support both flat  {"ats_score": 75, ...}
-    and nested         {"data": {"ats_score": 75, ...}}
-    response structures from the backend.
-    """
+   
     if isinstance(raw, dict) and "data" in raw and isinstance(raw["data"], dict):
         return raw["data"]
     return raw
@@ -371,10 +367,7 @@ def call_optimize_api(resume_text: str, jd_text: str) -> dict:
 
 
 def parse_analysis(data: dict) -> dict:
-    """
-    Normalise the analysis dict so downstream code never crashes on missing keys.
-    Accepts both snake_case and camelCase field names from the backend.
-    """
+
     def _get(*keys, default=None):
         for k in keys:
             if k in data:

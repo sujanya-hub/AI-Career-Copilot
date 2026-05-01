@@ -1,9 +1,3 @@
-"""
-backend/middleware.py
-Enterprise Middleware Layer — structured logging, JWT auth, request tracing,
-global exception handling, and CORS for the ResumeIQ backend.
-"""
-
 from __future__ import annotations
 
 import functools
