@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from backend.models.schemas import (
+from models.schemas import (
     AnalysisResponse,
     AnalyzeTextRequest,
     BulletImproveRequest,
@@ -29,7 +29,7 @@ from backend.models.schemas import (
     ResumeComparisonResponse,
     SectionRewrite,
 )
-from backend.services.career_copilot import CareerCopilotService
+from services.career_copilot import CareerCopilotService
 from configs.logging_config import get_logger
 from database.connection import AnalysisResult, get_db, init_db
 
