@@ -4,8 +4,8 @@ import re
 import uuid
 from typing import Any
 
-from backend.ai_engine import AIEngine
-from backend.models.schemas import (
+from ai_engine import AIEngine
+from models.schemas import (
     AnalysisResponse,
     BulletCandidate,
     BulletImprovement,
@@ -20,10 +20,10 @@ from backend.models.schemas import (
     ScoreComponent,
     SectionRewrite,
 )
-from backend.services.analysis_cache import AnalysisCache
-from backend.services.job_matcher import JobMatcher
-from backend.services.resume_parser import ResumeParser
-from backend.services.scoring_engine import ScoringEngine
+from services.analysis_cache import AnalysisCache
+from services.job_matcher import JobMatcher
+from services.resume_parser import ResumeParser
+from services.scoring_engine import ScoringEngine
 from core.analyzer import ResumeAnalyzer
 from core.extractor import PDFExtractor
 
