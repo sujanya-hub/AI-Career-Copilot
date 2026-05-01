@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+requests
+loguru
+PyMuPDF
+numpy
+scikit-learn
+sentence-transformers
+groq
+openai
