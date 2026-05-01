@@ -31,7 +31,7 @@ set OPENAI_API_KEY=your_key
 4. Start FastAPI:
 
 ```bash
-uvicorn backend.main:app --reload
+uvicorn main:app --reload
 ```
 
 5. Start Streamlit:

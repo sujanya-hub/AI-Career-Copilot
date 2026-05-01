@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from backend.services.scoring_engine import ScoringEngine, ATSScoreResult, SECTION_WEIGHTS
+from services.scoring_engine import ScoringEngine, ATSScoreResult, SECTION_WEIGHTS
 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────

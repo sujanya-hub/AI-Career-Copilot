@@ -24,8 +24,8 @@ from services.analysis_cache import AnalysisCache
 from services.job_matcher import JobMatcher
 from services.resume_parser import ResumeParser
 from services.scoring_engine import ScoringEngine
-from core.analyzer import ResumeAnalyzer
-from core.extractor import PDFExtractor
+from backend.core.analyzer import ResumeAnalyzer
+from backend.core.extractor import PDFExtractor
 
 
 ACTION_VERBS = (

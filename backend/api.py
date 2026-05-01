@@ -16,11 +16,11 @@ from typing import Optional
 
 from configs.logging_config import get_logger
 from database.connection import get_db, AnalysisResult, init_db
-from backend.services.resume_parser import ResumeParser
-from backend.services.job_matcher import JobMatcher
-from backend.services.scoring_engine import ScoringEngine
-from backend.ai_engine import AIEngine
-from backend.utils.response_formatter import ResponseFormatter
+from services.resume_parser import ResumeParser
+from services.job_matcher import JobMatcher
+from services.scoring_engine import ScoringEngine
+from ai_engine import AIEngine
+from utils.response_formatter import ResponseFormatter
 
 logger = get_logger(__name__)
 
@@ -467,4 +467,4 @@ async def get_history(
         )
 
 
-from backend.main import app as app
+from main import app as app

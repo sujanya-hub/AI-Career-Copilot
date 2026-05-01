@@ -10,7 +10,7 @@ import os
 from unittest.mock import MagicMock, patch, PropertyMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from backend.ai_engine import (
+from ai_engine import (
     AIEngine,
     AIProvider,
     GenerationResult,
