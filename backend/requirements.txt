@@ -10,3 +10,4 @@ scikit-learn
 sentence-transformers
 groq
 openai
+sqlalchemy
