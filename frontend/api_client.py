@@ -6,8 +6,10 @@ from typing import Any
 import requests
 
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
-
+BACKEND_URL = os.getenv(
+    "BACKEND_URL",
+    "https://ai-career-copilot-6u8o.onrender.com"
+).rstrip("/")
 
 class APIError(RuntimeError):
     pass
