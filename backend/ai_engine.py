@@ -3,6 +3,7 @@ AI Engine for Resume Analyzer — powered by Groq (LLaMA 3).
 Handles resume optimization, professional summary generation,
 and general LLM completions with retry logic.
 """
+from __future__ import annotations  # enables modern type hints on Python 3.9+
 
 import json
 import os
@@ -35,7 +36,6 @@ from loguru import logger
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-MODEL_ID = "llama3-70b-8192"
 DEFAULT_TEMPERATURE = 0.4
 DEFAULT_MAX_TOKENS = 4096
 MAX_RETRIES = 3
@@ -60,387 +60,7 @@ OPTIMIZATION_INSTRUCTIONS = {
 }
 
 
-# ── AIEngine ──────────────────────────────────────────────────────────────────
-
-class AIEngine:
-    """
-    Groq-backed AI engine for resume optimization and generation tasks.
-
-    All public methods implement:
-    - Structured prompt engineering
-    - Retry logic with exponential back-off
-    - Full loguru logging
-    - Clean return contracts
-    """
-
-    def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise EnvironmentError(
-                "GROQ_API_KEY environment variable is not set. "
-                "Export it before starting the server."
-            )
-        self.client = Groq(api_key=api_key)
-        self.model = MODEL_ID
-        logger.info(f"AIEngine initialized — model={self.model}")
-
-    # ── Core Generation ───────────────────────────────────────────────────────
-
-    def generate(
-        self,
-        prompt: str,
-        system_prompt: Optional[str] = None,
-        temperature: float = DEFAULT_TEMPERATURE,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
-    ) -> str:
-        """
-        Send a prompt to the Groq LLaMA 3 model and return the text response.
-
-        Args:
-            prompt:        User-turn content.
-            system_prompt: Optional system-turn instruction.
-            temperature:   Sampling temperature (default 0.4 for determinism).
-            max_tokens:    Maximum tokens in the completion.
-
-        Returns:
-            The model's text response as a plain string.
-
-        Raises:
-            RuntimeError: If all retry attempts are exhausted.
-        """
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt.strip()})
-        messages.append({"role": "user", "content": prompt.strip()})
-
-        last_exception: Optional[Exception] = None
-
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Groq API call — attempt {attempt}/{MAX_RETRIES}, "
-                    f"model={self.model}, temperature={temperature}, "
-                    f"max_tokens={max_tokens}"
-                )
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-                text = response.choices[0].message.content.strip()
-                logger.debug(
-                    f"Groq response received — "
-                    f"tokens_used={response.usage.total_tokens}"
-                )
-                return text
-
-            except RateLimitError as e:
-                wait = RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
-                logger.warning(
-                    f"Rate limit hit on attempt {attempt}. "
-                    f"Retrying in {wait}s... ({e})"
-                )
-                last_exception = e
-                time.sleep(wait)
-
-            except APIConnectionError as e:
-                wait = RETRY_DELAY_SECONDS * attempt
-                logger.warning(
-                    f"Connection error on attempt {attempt}. "
-                    f"Retrying in {wait}s... ({e})"
-                )
-                last_exception = e
-                time.sleep(wait)
-
-            except APIStatusError as e:
-                logger.error(
-                    f"Groq API status error {e.status_code} on attempt {attempt}: "
-                    f"{e.message}"
-                )
-                last_exception = e
-                if e.status_code < 500:
-                    # 4xx errors won't be fixed by retrying
-                    break
-                time.sleep(RETRY_DELAY_SECONDS * attempt)
-
-            except Exception as e:
-                logger.error(f"Unexpected error on attempt {attempt}: {e}")
-                last_exception = e
-                break
-
-        raise RuntimeError(
-            f"Groq API call failed after {MAX_RETRIES} attempts. "
-            f"Last error: {last_exception}"
-        )
-
-    # ── Resume Optimization ───────────────────────────────────────────────────
-
-    def optimize(
-        self,
-        resume_text: str,
-        parsed_resume: dict,
-        job_description: str,
-        missing_keywords: list,
-        optimization_level: str = "moderate",
-    ) -> dict:
-        """
-        Rewrite a resume to maximize ATS compatibility with a given job description.
-
-        Args:
-            resume_text:        Raw original resume text.
-            parsed_resume:      Structured dict from ResumeParser.
-            job_description:    Target role's job description.
-            missing_keywords:   Keywords present in JD but absent in resume.
-            optimization_level: One of 'light', 'moderate', 'aggressive'.
-
-        Returns:
-            {
-                "optimized_resume": str,   # Full rewritten resume text
-                "changes_made": list[str], # Human-readable list of edits
-            }
-        """
-        if optimization_level not in OPTIMIZATION_INSTRUCTIONS:
-            logger.warning(
-                f"Unknown optimization_level='{optimization_level}', "
-                f"defaulting to 'moderate'."
-            )
-            optimization_level = "moderate"
-
-        level_instruction = OPTIMIZATION_INSTRUCTIONS[optimization_level]
-
-        keywords_str = (
-            ", ".join(missing_keywords)
-            if missing_keywords
-            else "None identified — focus on general ATS improvements."
-        )
-
-        sections_overview = "\n".join(
-            f"  - {k}: {str(v)[:120]}..." if len(str(v)) > 120 else f"  - {k}: {v}"
-            for k, v in parsed_resume.items()
-        )
-
-        system_prompt = """You are an expert resume writer and ATS optimization specialist
-with 15+ years of experience helping candidates land interviews at top companies.
-
-Your role:
-- Optimize resumes for Applicant Tracking Systems (ATS) without fabricating information
-- Strengthen language using industry-standard action verbs
-- Integrate keywords naturally so the resume reads well for human reviewers too
-- Never invent companies, titles, dates, degrees, or skills not implied by the original
-
-You always respond in valid JSON. No prose outside the JSON block."""
-
-        prompt = f"""
-## Task
-Optimize the resume below for the given job description.
-Optimization level: **{optimization_level.upper()}**
-
-### Level Instructions
-{level_instruction}
-
----
-
-## Original Resume
-{resume_text}
-
----
-
-## Job Description
-{job_description}
-
----
-
-## Parsed Resume Sections
-{sections_overview}
-
----
-
-## Missing Keywords to Integrate
-{keywords_str}
-
----
-
-## Instructions
-1. Rewrite the resume following the optimization level instructions.
-2. Integrate the missing keywords naturally — do NOT just append them as a list.
-3. Add specific, believable metrics (e.g., "reduced load time by 30%") ONLY where
-   the original text implies a quantifiable achievement.
-4. Maintain the original chronological structure.
-5. Use strong past-tense action verbs (Led, Built, Designed, Optimized, etc.).
-6. Ensure the output is clean, ATS-parseable plain text.
-
-## Response Format (strict JSON, no extra keys)
-{{
-  "optimized_resume": "<full rewritten resume as plain text>",
-  "changes_made": [
-    "<short description of change 1>",
-    "<short description of change 2>",
-    ...
-  ]
-}}
-"""
-
-        logger.info(
-            f"Starting resume optimization — level={optimization_level}, "
-            f"missing_keywords={len(missing_keywords)}"
-        )
-
-        try:
-            raw_response = self.generate(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                temperature=0.35,
-                max_tokens=DEFAULT_MAX_TOKENS,
-            )
-            result = self._parse_json_response(raw_response)
-
-            # Validate required keys
-            if "optimized_resume" not in result:
-                raise ValueError(
-                    "Model response missing 'optimized_resume' key."
-                )
-            if "changes_made" not in result or not isinstance(
-                result["changes_made"], list
-            ):
-                result["changes_made"] = ["Resume rewritten for ATS optimization."]
-
-            logger.info(
-                f"Optimization complete — "
-                f"changes={len(result['changes_made'])}, "
-                f"output_length={len(result['optimized_resume'])} chars"
-            )
-            return result
-
-        except Exception as e:
-            logger.error(f"Resume optimization failed: {e}")
-            # Graceful degradation — return original with error note
-            return {
-                "optimized_resume": resume_text,
-                "changes_made": [
-                    f"Optimization failed due to an AI engine error: {str(e)}"
-                ],
-            }
-
-    # ── Professional Summary ──────────────────────────────────────────────────
-
-    def generate_summary(
-        self,
-        parsed_resume: dict,
-        job_description: Optional[str] = None,
-        max_sentences: int = 4,
-    ) -> str:
-        """
-        Generate a concise professional summary tailored to a job description.
-
-        Args:
-            parsed_resume:   Structured resume sections from ResumeParser.
-            job_description: Optional target JD for tighter alignment.
-            max_sentences:   Target length of the summary (default 4).
-
-        Returns:
-            A polished professional summary string.
-        """
-        sections_text = "\n".join(
-            f"{k}: {v}" for k, v in parsed_resume.items()
-            if k.lower() not in {"summary", "objective"}
-        )
-
-        jd_context = (
-            f"\n\n## Target Job Description\n{job_description}"
-            if job_description
-            else ""
-        )
-
-        system_prompt = (
-            "You are a professional resume writer. "
-            "Write concise, impactful professional summaries in plain text. "
-            "No bullet points. No markdown. No JSON. Just the summary paragraph."
-        )
-
-        prompt = f"""
-## Task
-Write a {max_sentences}-sentence professional summary for this candidate.
-
-## Resume Sections
-{sections_text}
-{jd_context}
-
-## Guidelines
-- Lead with years of experience and primary specialty
-- Highlight 2–3 strongest technical or domain skills
-- Mention a key achievement or impact if inferable from the resume
-- Align language with the job description when provided
-- Avoid generic filler phrases ("results-driven", "team player")
-- Write in third-person professional tone
-- Output the summary paragraph only — no labels, no extra text
-"""
-
-        logger.info("Generating professional summary.")
-        try:
-            summary = self.generate(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                temperature=0.45,
-                max_tokens=300,
-            )
-            # Strip any accidental labels the model might prepend
-            summary = re.sub(
-                r"^(professional summary[:\-]?\s*)",
-                "",
-                summary,
-                flags=re.IGNORECASE,
-            ).strip()
-            logger.info(
-                f"Summary generated — {len(summary.split())} words"
-            )
-            return summary
-        except Exception as e:
-            logger.error(f"Summary generation failed: {e}")
-            return "Experienced professional with a strong background in the relevant field."
-
-    # ── Internal Helpers ──────────────────────────────────────────────────────
-
-    def _parse_json_response(self, raw: str) -> dict:
-        """
-        Extract and parse a JSON object from a model response that may contain
-        surrounding prose or markdown code fences.
-
-        Args:
-            raw: Raw string from the LLM.
-
-        Returns:
-            Parsed Python dict.
-
-        Raises:
-            ValueError: If no valid JSON object can be extracted.
-        """
-        # Strip markdown fences
-        cleaned = re.sub(r"```(?:json)?", "", raw).strip()
-        cleaned = cleaned.replace("```", "").strip()
-
-        # Try direct parse first
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            pass
-
-        # Attempt to extract the outermost JSON object
-        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError as e:
-                raise ValueError(
-                    f"Could not parse JSON from model response. Error: {e}\n"
-                    f"Raw (truncated): {cleaned[:400]}"
-                )
-
-        raise ValueError(
-            f"No JSON object found in model response. "
-            f"Raw (truncated): {cleaned[:400]}"
-        )
-
+# ── Enums & Dataclasses ───────────────────────────────────────────────────────
 
 class AIProvider(str, Enum):
     GROQ = "groq"
@@ -466,6 +86,8 @@ class GenerationResult:
     latency_ms: int | None = None
     fallback_used: bool = False
 
+
+# ── Prompt Templates ──────────────────────────────────────────────────────────
 
 class PromptTemplates:
     MAX_PROMPT_CHARS = 12000
@@ -720,6 +342,8 @@ Return JSON:
         return system, user
 
 
+# ── Provider Clients ──────────────────────────────────────────────────────────
+
 class _GroqProviderClient:
     def __init__(self, api_key: str):
         if Groq is None:
@@ -777,8 +401,11 @@ class _OpenAIProviderClient:
         )
 
 
+# ── AIEngine ──────────────────────────────────────────────────────────────────
+
 class AIEngine:
-    DEFAULT_GROQ_MODEL = "llama3-70b-8192"
+    # ✅ Updated from decommissioned "llama3-70b-8192"
+    DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
     DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
     def __init__(
@@ -1188,7 +815,7 @@ class AIEngine:
                     "role": role,
                     "match_score": score,
                     "rationale": f"This role matches {len(hits)} visible signals in your resume: {', '.join(hits) or 'general engineering fit'}.",
-                    "missing_signals": [signal for signal in signals if signal not in hits][:3],
+                    "missing_signals": [signal for signal in signals if signal not in lower][:3],
                 }
             )
         predictions.sort(key=lambda item: item["match_score"], reverse=True)
