@@ -22,7 +22,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://ai-career-copilot-6u8o.onrender.com").rstrip("/")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
 
 
 def inject_css():
@@ -527,6 +528,14 @@ def check_backend_health() -> bool:
         except Exception:
             continue
     return False
+
+
+def anthropic_headers() -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+    }
 
 
 def grade_tag(score: int) -> tuple:
@@ -1444,18 +1453,26 @@ Suggestions: {'; '.join(_safe_list(analysis.get('suggestions'))[:5])}
 JD snippet: {jd_text[:400] if jd_text else 'Not provided'}
 Answer concisely and actionably. Reference the actual data above."""
         with st.spinner("Thinking..."):
-            try:
-                resp = requests.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"Content-Type":"application/json"},
-                    json={"model":"claude-sonnet-4-20250514","max_tokens":600,"system":context,
-                          "messages":[*[{"role":m["role"],"content":m["content"]} for m in st.session_state.chat_history[-6:]],
-                                      {"role":"user","content":send_input}]},
-                    timeout=30)
-                data = resp.json()
-                ai_reply = data.get("content",[{}])[0].get("text","Unable to generate a response.")
-            except Exception:
-                ai_reply = "Connection error. Please retry."
+            if not ANTHROPIC_API_KEY:
+                ai_reply = "Chat is unavailable because ANTHROPIC_API_KEY is not configured for the Streamlit service."
+            else:
+                try:
+                    resp = requests.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers=anthropic_headers(),
+                        json={"model":"claude-sonnet-4-20250514","max_tokens":600,"system":context,
+                              "messages":[*[{"role":m["role"],"content":m["content"]} for m in st.session_state.chat_history[-6:]],
+                                          {"role":"user","content":send_input}]},
+                        timeout=30)
+                    data = resp.json()
+                    if resp.ok:
+                        ai_reply = data.get("content",[{}])[0].get("text","Unable to generate a response.")
+                    else:
+                        error = data.get("error", {})
+                        detail = error.get("message") if isinstance(error, dict) else None
+                        ai_reply = detail or f"Anthropic request failed with status {resp.status_code}."
+                except requests.RequestException:
+                    ai_reply = "Connection error. Please retry."
         st.session_state.chat_history.append({"role":"user","content":send_input})
         st.session_state.chat_history.append({"role":"assistant","content":ai_reply})
         st.rerun()

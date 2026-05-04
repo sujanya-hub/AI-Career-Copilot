@@ -21,9 +21,11 @@ Production-style Streamlit + FastAPI resume platform with:
 pip install -r requirements.txt
 ```
 
-3. Set API keys if you want live LLM generation:
+3. Set environment variables before starting the apps:
 
 ```bash
+set BACKEND_URL=https://ai-career-copilot-6u8o.onrender.com
+set ANTHROPIC_API_KEY=your_anthropic_key
 set GROQ_API_KEY=your_key
 set OPENAI_API_KEY=your_key
 ```
@@ -43,5 +45,7 @@ streamlit run app.py
 ## Notes
 
 - The backend accepts PDF uploads for analysis and comparison.
+- For Render deployments, `BACKEND_URL` on the Streamlit service must point to the public FastAPI service URL, not `127.0.0.1`.
+- The Copilot Chat tab requires `ANTHROPIC_API_KEY` on the Streamlit service because that request is sent directly from the frontend app.
 - If LLM keys are missing, the app still works using strong deterministic fallbacks.
 - Analysis results are cached in-memory and persisted to SQLite history.
