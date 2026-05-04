@@ -124,10 +124,20 @@ async def _read_resume_from_request(
     return resume_text, form_job_description.strip()
 
 
+# ── HEALTH ────────────────────────────────────────────────────────────────────
+
 @app.get("/", tags=["Health"])
 async def root():
     return {"status": "ok", "service": "ResumeIQ Career Copilot API", "version": "3.0.0"}
 
+
+@app.get("/health", tags=["Health"])
+async def health():
+    """Dedicated health check endpoint for uptime monitors and frontend status."""
+    return {"status": "ok", "service": "ResumeIQ Career Copilot API", "version": "3.0.0"}
+
+
+# ── ANALYSIS ──────────────────────────────────────────────────────────────────
 
 @app.post("/analyze", response_model=AnalysisResponse, tags=["Analysis"])
 async def analyze_resume(
@@ -158,6 +168,42 @@ async def analyze_resume(
     return analysis
 
 
+@app.post("/rescore", response_model=AnalysisResponse, tags=["Analysis"])
+async def rescore_resume(request: Request, db: Session = Depends(get_db)):
+    """
+    Re-score an edited resume text (no PDF upload needed).
+    Accepts JSON: { "resume_text": "...", "job_description": "..." }
+    Used by the Live Loop tab in the frontend.
+    """
+    copilot = _require_service()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Expected JSON body with resume_text and job_description.")
+
+    resume_text = (body.get("resume_text") or "").strip()
+    job_description = (body.get("job_description") or "").strip()
+
+    if len(resume_text) < 50:
+        raise HTTPException(status_code=422, detail="resume_text is too short (min 50 chars).")
+    if len(job_description) < 20:
+        raise HTTPException(status_code=422, detail="job_description is required (min 20 chars).")
+
+    analysis = await asyncio.to_thread(
+        lambda: copilot.analyze(
+            resume_text,
+            job_description,
+            include_ai=True,
+            use_cache=False,  # always fresh for live re-scoring
+        )
+    )
+    if not analysis.cached:
+        await asyncio.to_thread(_persist_analysis, db, analysis, job_description)
+    return analysis
+
+
+# ── RECRUITER ─────────────────────────────────────────────────────────────────
+
 @app.post("/recruiter-feedback", response_model=RecruiterFeedback, tags=["Analysis"])
 async def recruiter_feedback(payload: RecruiterFeedbackRequest):
     copilot = _require_service()
@@ -179,6 +225,8 @@ async def recruiter_feedback(payload: RecruiterFeedbackRequest):
         )
     )
 
+
+# ── OPTIMIZATION ──────────────────────────────────────────────────────────────
 
 @app.post("/optimize", response_model=OptimizationResponse, tags=["Optimization"])
 async def optimize_resume(payload: OptimizeRequest):
@@ -215,6 +263,8 @@ async def inject_keywords(payload: KeywordInjectionRequest):
     )
 
 
+# ── COPILOT ───────────────────────────────────────────────────────────────────
+
 @app.post("/chat", response_model=ResumeChatResponse, tags=["Copilot"])
 async def resume_chat(payload: ResumeChatRequest):
     copilot = _require_service()
@@ -235,6 +285,8 @@ async def job_fit(payload: JobFitRequest):
     return await asyncio.to_thread(copilot.predict_roles, payload.resume_text, payload.job_description)
 
 
+# ── COMPARISON ────────────────────────────────────────────────────────────────
+
 @app.post("/compare", response_model=ResumeComparisonResponse, tags=["Analysis"])
 async def compare_resumes(
     baseline_file: UploadFile = File(...),
@@ -253,6 +305,8 @@ async def compare_resumes(
         job_description,
     )
 
+
+# ── HISTORY ───────────────────────────────────────────────────────────────────
 
 @app.get("/history", response_model=HistoryResponse, tags=["History"])
 async def get_history(

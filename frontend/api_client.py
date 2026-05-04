@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import requests
-
 
 BACKEND_URL = os.getenv(
     "BACKEND_URL",
     "https://ai-career-copilot-6u8o.onrender.com"
 ).rstrip("/")
+
 
 class APIError(RuntimeError):
     pass
@@ -27,7 +28,37 @@ def _handle_response(response: requests.Response) -> Any:
     return payload
 
 
+def _wake_backend() -> None:
+    """
+    Ping GET / to wake Render from cold start before making a real request.
+    Silently ignores failures — the real request will surface any actual errors.
+    """
+    try:
+        requests.get(f"{BACKEND_URL}/health", timeout=15)
+    except Exception:
+        try:
+            requests.get(f"{BACKEND_URL}/", timeout=15)
+        except Exception:
+            pass
+
+
+def check_backend_health() -> bool:
+    """
+    Returns True if the backend is reachable and healthy.
+    Accepts 200 from /health or / as a live signal.
+    """
+    for path in ["/health", "/"]:
+        try:
+            r = requests.get(f"{BACKEND_URL}{path}", timeout=5)
+            if r.status_code == 200:
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def analyze_resume(pdf_bytes: bytes, filename: str, job_description: str) -> dict[str, Any]:
+    _wake_backend()
     response = requests.post(
         f"{BACKEND_URL}/analyze",
         files={"file": (filename, pdf_bytes, "application/pdf")},
@@ -37,7 +68,22 @@ def analyze_resume(pdf_bytes: bytes, filename: str, job_description: str) -> dic
     return _handle_response(response)
 
 
+def rescore_resume(resume_text: str, job_description: str) -> dict[str, Any]:
+    """
+    Re-score edited resume text via the /rescore endpoint (no PDF needed).
+    Used by the Live Loop tab.
+    """
+    _wake_backend()
+    response = requests.post(
+        f"{BACKEND_URL}/rescore",
+        json={"resume_text": resume_text, "job_description": job_description},
+        timeout=120,
+    )
+    return _handle_response(response)
+
+
 def optimize_resume(resume_text: str, job_description: str, optimization_level: str) -> dict[str, Any]:
+    _wake_backend()
     response = requests.post(
         f"{BACKEND_URL}/optimize",
         json={
