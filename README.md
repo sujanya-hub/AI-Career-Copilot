@@ -28,6 +28,7 @@ set BACKEND_URL=https://ai-career-copilot-6u8o.onrender.com
 set ANTHROPIC_API_KEY=your_anthropic_key
 set GROQ_API_KEY=your_key
 set OPENAI_API_KEY=your_key
+set ENABLE_SENTENCE_TRANSFORMER=false
 ```
 
 4. Start FastAPI:
@@ -47,5 +48,6 @@ streamlit run app.py
 - The backend accepts PDF uploads for analysis and comparison.
 - For Render deployments, `BACKEND_URL` on the Streamlit service must point to the public FastAPI service URL, not `127.0.0.1`.
 - The Copilot Chat tab requires `ANTHROPIC_API_KEY` on the Streamlit service because that request is sent directly from the frontend app.
+- On Render, leave `ENABLE_SENTENCE_TRANSFORMER=false` unless you have preloaded the model into the image and sized the instance for it. This prevents `/analyze` from trying to download or load a large embedding model during a live request.
 - If LLM keys are missing, the app still works using strong deterministic fallbacks.
 - Analysis results are cached in-memory and persisted to SQLite history.

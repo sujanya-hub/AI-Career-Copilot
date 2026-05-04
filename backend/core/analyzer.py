@@ -8,6 +8,7 @@ Scoring formula:
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING
@@ -23,6 +24,13 @@ if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
 
 logger = get_logger("analyzer")
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 # ── Built-in stopwords (no NLTK dependency) ───────────────────────────────────
 
@@ -67,10 +75,21 @@ class ModelManager:
         if cls._load_attempted:
             return cls._instance
         cls._load_attempted = True
+        if not _env_flag("ENABLE_SENTENCE_TRANSFORMER", default=False):
+            logger.info(
+                "SentenceTransformer disabled; set ENABLE_SENTENCE_TRANSFORMER=true to enable semantic embeddings."
+            )
+            return None
         try:
             from sentence_transformers import SentenceTransformer
-            logger.info("Loading SentenceTransformer (all-MiniLM-L6-v2)…")
-            cls._instance = SentenceTransformer("all-MiniLM-L6-v2")
+            model_name = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
+            local_only = _env_flag("SENTENCE_TRANSFORMER_LOCAL_ONLY", default=True)
+            logger.info(
+                "Loading SentenceTransformer model=%s local_only=%s",
+                model_name,
+                local_only,
+            )
+            cls._instance = SentenceTransformer(model_name, local_files_only=local_only)
             logger.info("SentenceTransformer ready.")
         except Exception as exc:
             logger.error("Failed to load embedding model: %s", exc)
