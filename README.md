@@ -159,16 +159,18 @@ streamlit run app.py
 
 ```
 AI-Career-Copilot/
-├── app.py                      # Streamlit frontend
 ├── backend/
-│   ├── main.py                 # FastAPI app
-│   ├── parser.py               # PDF/DOCX text extraction
-│   ├── similarity.py           # Sentence Transformers + cosine scoring
-│   ├── llm_analyzer.py         # Multi-LLM prompt workflows
-│   ├── ats_scorer.py           # ATS scoring logic
-│   └── session_store.py        # SQLite persistence
-├── requirements.txt
-└── .env.example
+├── configs/
+├── data/
+├── database/
+├── frontend/
+├── logs/
+├── tests/
+├── .env.example
+├── .gitignore
+├── pytest.ini
+├── runtime.txt
+└── README.md
 ```
 
 ---
